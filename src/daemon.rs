@@ -14,7 +14,7 @@ pub struct Config {
     pub fan: HashMap<String, FanConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct FanConfig {
     pub sensor_name: String,
     pub sensor_input: String,
@@ -23,7 +23,7 @@ pub struct FanConfig {
     pub steps: Vec<FanStep>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct FanStep {
     pub temp: i32,
     pub power: u8, // 0-100%
@@ -66,6 +66,14 @@ impl FanController {
 
         self.init_fans();
 
+        // Keep a copy of the last processed config for change detection
+        let last_config = {
+            let config_guard = self.config.read().unwrap();
+            config_guard.fan.clone()
+        };
+        // Keep a copy of the last hardware mapping for change detection
+        let mut last_hw_map = extract_hw_map(&last_config);
+
         loop {
             if !self.running.load(Ordering::SeqCst) {
                 break;
@@ -76,6 +84,14 @@ impl FanController {
                 let config_guard = self.config.read().unwrap();
                 config_guard.fan.clone()
             };
+
+            let current_hw_map = extract_hw_map(&fans_to_process);
+            // Only clean and re-init if hardware mapping changed
+            if current_hw_map != last_hw_map {
+                self.cleanup_fans();
+                self.init_fans();
+                last_hw_map = current_hw_map;
+            }
             
             for (name, fan) in &fans_to_process {
                 if let Ok(temp_content) = fs::read_to_string(&fan.sensor_input) {
@@ -91,13 +107,15 @@ impl FanController {
             thread::sleep(Duration::from_secs(5));
         }
 
-        // Cleanup: disable PWM for all fans
-        println!("Disabling PWM for all fans...");
+        self.cleanup_fans();
+        println!("Shutdown complete.");
+    }
+
+    pub fn cleanup_fans(&self) {
         let config_guard = self.config.read().unwrap();
         for (name, fan) in &config_guard.fan {
             set_pwm_enable_with_retry(fan, false);
         }
-        println!("Shutdown complete.");
     }
 
 
@@ -114,6 +132,20 @@ impl FanController {
     }
 }
 
+// Helper function to extract hardware mapping from config
+fn extract_hw_map(fans: &HashMap<String, FanConfig>) -> HashMap<String, (String, String, String, String)> {
+    fans.iter().map(|(name, fan)| {
+        (
+            name.clone(),
+            (
+                fan.sensor_name.clone(),
+                fan.sensor_input.clone(),
+                fan.pwm_name.clone(),
+                fan.pwm_input.clone(),
+            )
+        )
+    }).collect()
+}
 
 pub fn find_sysfs_path(name: &str, pattern: &str) -> Option<PathBuf> {
     println!("Searching for {} with pattern: {}", name, pattern);
