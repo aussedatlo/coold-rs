@@ -1,7 +1,7 @@
 use actix_web::{web, App, HttpServer, HttpResponse, Responder, Result};
 use actix_web::middleware::Logger;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use crate::daemon::{Config, FanConfig, FanStep, FanController, save_config};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,10 +78,11 @@ pub async fn start_api(controller: FanController, port: u16) -> std::io::Result<
 async fn get_status(state: web::Data<ApiState>) -> Result<impl Responder> {
     let controller = state.controller.lock().unwrap();
     let config = controller.get_config();
+    let config_guard = config.read().unwrap();
     
     let mut fan_statuses = Vec::new();
     
-    for (name, fan) in &config.fan {
+    for (name, fan) in &config_guard.fan {
         // Try to read current temperature
         let temperature = std::fs::read_to_string(&fan.sensor_input)
             .ok()
@@ -115,12 +116,12 @@ async fn get_status(state: web::Data<ApiState>) -> Result<impl Responder> {
 
 async fn get_config(state: web::Data<ApiState>) -> Result<impl Responder> {
     let controller = state.controller.lock().unwrap();
-    let config = controller.get_config();
+    let config = controller.get_config().read().unwrap().clone();
     
     let response = ApiResponse {
         success: true,
         message: "Configuration retrieved successfully".to_string(),
-        data: Some(config.as_ref().clone()),
+        data: Some(config),
     };
     
     Ok(HttpResponse::Ok().json(response))
@@ -130,11 +131,11 @@ async fn update_config(
     state: web::Data<ApiState>,
     new_config: web::Json<Config>,
 ) -> Result<impl Responder> {
-    let mut controller = state.controller.lock().unwrap();
+    let controller = state.controller.lock().unwrap();
     controller.update_config(new_config.into_inner());
     
     // Save to file
-    let config = controller.get_config();
+    let config = controller.get_config().read().unwrap().clone();
     if let Err(e) = save_config(&config) {
         let response = ApiResponse::<()> {
             success: false,
@@ -155,12 +156,12 @@ async fn update_config(
 
 async fn get_fans(state: web::Data<ApiState>) -> Result<impl Responder> {
     let controller = state.controller.lock().unwrap();
-    let config = controller.get_config();
+    let config = controller.get_config().read().unwrap().clone();
     
     let response = ApiResponse {
         success: true,
         message: "Fans retrieved successfully".to_string(),
-        data: Some(config.fan.clone()),
+        data: Some(config.fan),
     };
     
     Ok(HttpResponse::Ok().json(response))
@@ -172,7 +173,7 @@ async fn get_fan(
 ) -> Result<impl Responder> {
     let fan_name = path.into_inner();
     let controller = state.controller.lock().unwrap();
-    let config = controller.get_config();
+    let config = controller.get_config().read().unwrap().clone();
     
     if let Some(fan) = config.fan.get(&fan_name) {
         let response = ApiResponse {
@@ -197,15 +198,15 @@ async fn update_fan(
     update_data: web::Json<UpdateFanRequest>,
 ) -> Result<impl Responder> {
     let fan_name = path.into_inner();
-    let mut controller = state.controller.lock().unwrap();
-    let mut config = controller.get_config().as_ref().clone();
+    let controller = state.controller.lock().unwrap();
+    let mut config = controller.get_config().read().unwrap().clone();
     
     if let Some(fan) = config.fan.get_mut(&fan_name) {
         fan.steps = update_data.steps.clone();
         controller.update_config(config);
         
         // Save to file
-        let config = controller.get_config();
+        let config = controller.get_config().read().unwrap().clone();
         if let Err(e) = save_config(&config) {
             let response = ApiResponse::<()> {
                 success: false,
@@ -236,14 +237,14 @@ async fn delete_fan(
     path: web::Path<String>,
 ) -> Result<impl Responder> {
     let fan_name = path.into_inner();
-    let mut controller = state.controller.lock().unwrap();
-    let mut config = controller.get_config().as_ref().clone();
+    let controller = state.controller.lock().unwrap();
+    let mut config = controller.get_config().read().unwrap().clone();
     
     if config.fan.remove(&fan_name).is_some() {
         controller.update_config(config);
         
         // Save to file
-        let config = controller.get_config();
+        let config = controller.get_config().read().unwrap().clone();
         if let Err(e) = save_config(&config) {
             let response = ApiResponse::<()> {
                 success: false,
@@ -273,8 +274,8 @@ async fn add_fan(
     state: web::Data<ApiState>,
     add_data: web::Json<AddFanRequest>,
 ) -> Result<impl Responder> {
-    let mut controller = state.controller.lock().unwrap();
-    let mut config = controller.get_config().as_ref().clone();
+    let controller = state.controller.lock().unwrap();
+    let mut config = controller.get_config().read().unwrap().clone();
     
     // Generate a unique name for the fan
     let fan_name = format!("fan_{}", config.fan.len() + 1);
@@ -291,7 +292,7 @@ async fn add_fan(
     controller.update_config(config);
     
     // Save to file
-    let config = controller.get_config();
+    let config = controller.get_config().read().unwrap().clone();
     if let Err(e) = save_config(&config) {
         let response = ApiResponse::<()> {
             success: false,

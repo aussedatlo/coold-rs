@@ -7,6 +7,7 @@ use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use glob::glob;
+use std::sync::RwLock;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
@@ -30,14 +31,14 @@ pub struct FanStep {
 
 #[derive(Clone)]
 pub struct FanController {
-    config: Arc<Config>,
+    config: Arc<RwLock<Config>>,
     running: Arc<AtomicBool>,
 }
 
 impl FanController {
     pub fn new(config: Config) -> Self {
         Self {
-            config: Arc::new(config),
+            config: Arc::new(RwLock::new(config)),
             running: Arc::new(AtomicBool::new(true)),
         }
     }
@@ -50,33 +51,33 @@ impl FanController {
         self.running.store(false, Ordering::SeqCst);
     }
 
-    pub fn get_config(&self) -> Arc<Config> {
-        self.config.clone()
+    pub fn get_config(&self) -> Arc<RwLock<Config>> {
+        Arc::clone(&self.config)
     }
 
-    pub fn update_config(&mut self, new_config: Config) {
-        self.config = Arc::new(new_config);
+    pub fn update_config(&self, new_config: Config) {
+        if let Ok(mut cfg) = self.config.write() {
+            *cfg = new_config;
+        }
     }
 
     pub fn run(&self) {
         println!("Starting fan control daemon...");
 
-        // Initialize all fans
-        for (name, fan) in &self.config.fan {
-            println!("Fan: {}", name);
-            println!("  Sensor input: {}", fan.sensor_input);
-            println!("  PWM input: {}", fan.pwm_input);
-            println!("  Steps: {:?}", fan.steps);
-
-            set_pwm_enable_with_retry(fan, true);
-        }
+        self.init_fans();
 
         loop {
             if !self.running.load(Ordering::SeqCst) {
                 break;
             }
 
-            for (name, fan) in &self.config.fan {
+            // Clone the config data to avoid holding the lock during processing
+            let fans_to_process = {
+                let config_guard = self.config.read().unwrap();
+                config_guard.fan.clone()
+            };
+            
+            for (name, fan) in &fans_to_process {
                 if let Ok(temp_content) = fs::read_to_string(&fan.sensor_input) {
                     if let Ok(temp) = temp_content.trim().parse::<i32>() {
                         let temp = temp / 1000;
@@ -86,18 +87,33 @@ impl FanController {
                     }
                 }
             }
-
+        
             thread::sleep(Duration::from_secs(5));
         }
 
         // Cleanup: disable PWM for all fans
         println!("Disabling PWM for all fans...");
-        for (name, fan) in &self.config.fan {
+        let config_guard = self.config.read().unwrap();
+        for (name, fan) in &config_guard.fan {
             set_pwm_enable_with_retry(fan, false);
         }
         println!("Shutdown complete.");
     }
+
+
+    pub fn init_fans(&self) {
+        let config_guard = self.config.read().unwrap();
+            for (name, fan) in &config_guard.fan {
+                println!("Fan: {}", name);
+                println!("  Sensor input: {}", fan.sensor_input);
+                println!("  PWM input: {}", fan.pwm_input);
+                println!("  Steps: {:?}", fan.steps);
+
+                set_pwm_enable_with_retry(fan, true);
+            }
+    }
 }
+
 
 pub fn find_sysfs_path(name: &str, pattern: &str) -> Option<PathBuf> {
     println!("Searching for {} with pattern: {}", name, pattern);
