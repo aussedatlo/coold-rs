@@ -192,8 +192,23 @@ pub fn create_config() -> Config {
     config
 }
 
+// Helper to strip sysfs directory from sensor_input and pwm_input for saving
+fn config_for_save(config: &Config) -> Config {
+    let mut new_config = config.clone();
+    for fan in new_config.fan.values_mut() {
+        if let Some(sensor_file) = Path::new(&fan.sensor_input).file_name() {
+            fan.sensor_input = sensor_file.to_string_lossy().to_string();
+        }
+        if let Some(pwm_file) = Path::new(&fan.pwm_input).file_name() {
+            fan.pwm_input = pwm_file.to_string_lossy().to_string();
+        }
+    }
+    new_config
+}
+
 pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let config_str = serde_json::to_string_pretty(config)?;
+    let config_to_save = config_for_save(config);
+    let config_str = serde_json::to_string_pretty(&config_to_save)?;
     fs::write("config.json", config_str)?;
     Ok(())
 }
