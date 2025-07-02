@@ -51,8 +51,9 @@ impl FanController {
         self.running.store(false, Ordering::SeqCst);
     }
 
-    pub fn get_config(&self) -> Arc<RwLock<Config>> {
-        Arc::clone(&self.config)
+    pub fn get_config(&self) -> Config {
+      let config_guard = self.config.read().unwrap();
+      config_for_save(&config_guard)
     }
 
     pub fn update_config(&self, new_config: Config) {
