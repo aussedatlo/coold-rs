@@ -91,7 +91,7 @@ Response:
 
 ## Configuration
 
-The daemon reads configuration from `config.toml`. The configuration format remains the same as before, but can now be updated via the REST API.
+The daemon reads configuration from `config.json`. The configuration format is JSON and can be updated via the REST API.
 
 ## Building and Running
 
@@ -138,7 +138,7 @@ The CLI provides an easy way to interact with the daemon:
 ./target/release/coold-rs cli remove fan_1
 
 # Update entire configuration from file
-./target/release/coold-rs cli update-config new_config.toml
+./target/release/coold-rs cli update-config new_config.json
 
 # Stop the daemon
 ./target/release/coold-rs cli stop

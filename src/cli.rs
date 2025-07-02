@@ -169,7 +169,7 @@ async fn make_request(method: &str, endpoint: &str, data: Option<Value>) -> Resu
 
 fn load_config_from_file(file_path: &str) -> Result<Value, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(file_path)?;
-    let config: Config = toml::from_str(&content)?;
+    let config: Config = serde_json::from_str(&content)?;
     Ok(serde_json::to_value(config)?)
 }
 

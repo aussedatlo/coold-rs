@@ -1,0 +1,76 @@
+{
+  "fan": {
+    "cpu": {
+      "sensor_name": "k10temp",
+      "sensor_input": "temp1_input",
+      "pwm_name": "nct6686",
+      "pwm_input": "pwm1",
+      "steps": [
+        {
+          "temp": 30,
+          "power": 30
+        },
+        {
+          "temp": 50,
+          "power": 50
+        },
+        {
+          "temp": 70,
+          "power": 70
+        },
+        {
+          "temp": 75,
+          "power": 85
+        }
+      ]
+    },
+    "case": {
+      "sensor_name": "k10temp",
+      "sensor_input": "temp1_input",
+      "pwm_name": "nct6686",
+      "pwm_input": "pwm2",
+      "steps": [
+        {
+          "temp": 30,
+          "power": 30
+        },
+        {
+          "temp": 50,
+          "power": 40
+        },
+        {
+          "temp": 70,
+          "power": 50
+        },
+        {
+          "temp": 75,
+          "power": 70
+        }
+      ]
+    },
+    "gpu": {
+      "sensor_name": "amdgpu",
+      "sensor_input": "temp1_input",
+      "pwm_name": "nct6686",
+      "pwm_input": "pwm4",
+      "steps": [
+        {
+          "temp": 30,
+          "power": 30
+        },
+        {
+          "temp": 50,
+          "power": 50
+        },
+        {
+          "temp": 60,
+          "power": 70
+        },
+        {
+          "temp": 70,
+          "power": 80
+        }
+      ]
+    }
+  }
+} 

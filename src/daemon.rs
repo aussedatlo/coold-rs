@@ -121,8 +121,8 @@ pub fn find_sysfs_path(name: &str, pattern: &str) -> Option<PathBuf> {
 }
 
 pub fn create_config() -> Config {
-    let config_data = fs::read_to_string("config.toml").expect("Failed to read config");
-    let mut config: Config = toml::from_str(&config_data).expect("Invalid config");
+    let config_data = fs::read_to_string("config.json").expect("Failed to read config");
+    let mut config: Config = serde_json::from_str(&config_data).expect("Invalid config");
 
     for (name, fan) in &mut config.fan {
         let sensor_path = find_sysfs_path(&fan.sensor_name, "/sys/class/hwmon/hwmon*/name");
@@ -145,8 +145,8 @@ pub fn create_config() -> Config {
 }
 
 pub fn save_config(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let config_str = toml::to_string_pretty(config)?;
-    fs::write("config.toml", config_str)?;
+    let config_str = serde_json::to_string_pretty(config)?;
+    fs::write("config.json", config_str)?;
     Ok(())
 }
 
