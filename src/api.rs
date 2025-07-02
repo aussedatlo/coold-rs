@@ -2,7 +2,7 @@ use actix_web::{web, App, HttpServer, HttpResponse, Responder, Result};
 use actix_web::middleware::Logger;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, RwLock};
-use crate::daemon::{Config, FanConfig, FanStep, FanController, save_config};
+use crate::daemon::{Config, FanConfig, FanStep, FanController, save_config, enumerate_hwmon_devices};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -68,6 +68,7 @@ pub async fn start_api(controller: FanController, port: u16) -> std::io::Result<
                     .route("/fans", web::post().to(add_fan))
                     .route("/stop", web::post().to(stop_daemon))
                     .route("/start", web::post().to(start_daemon))
+                    .route("/hwmon_devices", web::get().to(get_hwmon_devices))
             )
     })
     .bind(("127.0.0.1", port))?
@@ -333,4 +334,15 @@ async fn start_daemon(state: web::Data<ApiState>) -> Result<impl Responder> {
     };
     
     Ok(HttpResponse::NotImplemented().json(response))
+}
+
+// New endpoint to fetch all available hwmon devices (sensors and PWM)
+async fn get_hwmon_devices() -> Result<impl Responder> {
+    let devices = enumerate_hwmon_devices();
+    let response = ApiResponse {
+        success: true,
+        message: "Hwmon devices enumerated successfully".to_string(),
+        data: Some(devices),
+    };
+    Ok(HttpResponse::Ok().json(response))
 } 

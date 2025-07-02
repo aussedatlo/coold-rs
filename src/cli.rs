@@ -65,6 +65,9 @@ pub enum CliCommands {
     
     /// Start the daemon
     Start,
+    
+    /// List all available hwmon devices, sensors, and PWM outputs
+    Devices,
 }
 
 pub async fn run_cli(cli_command: CliCommands) -> Result<(), Box<dyn std::error::Error>> {
@@ -130,6 +133,11 @@ pub async fn run_cli(cli_command: CliCommands) -> Result<(), Box<dyn std::error:
         CliCommands::Start => {
             let response = make_request("POST", "/start", None).await?;
             print_simple_response(response);
+        }
+        
+        CliCommands::Devices => {
+            let response = make_request("GET", "/hwmon_devices", None).await?;
+            print_hwmon_devices_response(response);
         }
     }
     
@@ -306,6 +314,39 @@ fn print_simple_response(response: Value) {
             println!("✓ {}", response["message"].as_str().unwrap_or("Success"));
         } else {
             println!("✗ {}", response["message"].as_str().unwrap_or("Unknown error"));
+        }
+    }
+}
+
+fn print_hwmon_devices_response(response: Value) {
+    if let Some(success) = response["success"].as_bool() {
+        if success {
+            if let Some(devices) = response["data"].as_array() {
+                println!("Available hwmon devices:");
+                println!("========================");
+                for dev in devices {
+                    let name = dev["name"].as_str().unwrap_or("unknown");
+                    let path = dev["hwmon_path"].as_str().unwrap_or("");
+                    println!("Device: {} (at {})", name, path);
+                    if let Some(sensors) = dev["sensors"].as_array() {
+                        println!("  Sensors:");
+                        for sensor in sensors {
+                            let input = sensor["input"].as_str().unwrap_or("");
+                            if let Some(label) = sensor["label"].as_str() {
+                                println!("    {} (label: {})", input, label);
+                            } else {
+                                println!("    {}", input);
+                            }
+                        }
+                    }
+                    if let Some(pwms) = dev["pwms"].as_array() {
+                        let pwms: Vec<_> = pwms.iter().filter_map(|p| p.as_str()).collect();
+                        println!("  PWMs: {}", pwms.join(", "));
+                    }
+                }
+            }
+        } else {
+            println!("Error: {}", response["message"].as_str().unwrap_or("Unknown error"));
         }
     }
 } 

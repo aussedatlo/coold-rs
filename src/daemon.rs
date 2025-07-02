@@ -292,4 +292,58 @@ fn set_pwm_enable_with_retry(fan: &FanConfig, enable: bool) {
         set_pwm_enable(fan, enable);
         thread::sleep(Duration::from_millis(300));
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HwmonSensorInfo {
+    pub input: String,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HwmonDeviceInfo {
+    pub hwmon_path: String,
+    pub name: String,
+    pub sensors: Vec<HwmonSensorInfo>,
+    pub pwms: Vec<String>,
+}
+
+/// Enumerate all available hwmon devices, listing their name, sensor inputs (with labels), and PWM outputs
+pub fn enumerate_hwmon_devices() -> Vec<HwmonDeviceInfo> {
+    let mut devices = Vec::new();
+    for entry in glob("/sys/class/hwmon/hwmon*/name").unwrap() {
+        if let Ok(name_path) = entry {
+            let hwmon_dir = name_path.parent().unwrap();
+            let name = fs::read_to_string(&name_path).unwrap_or_else(|_| "unknown".to_string()).trim().to_string();
+            // Find all temp*_input and pwm* files in this hwmon directory
+            let mut sensors = Vec::new();
+            let mut pwms = Vec::new();
+            if let Ok(entries) = fs::read_dir(hwmon_dir) {
+                for entry in entries.flatten() {
+                    let fname = entry.file_name();
+                    let fname = fname.to_string_lossy();
+                    if fname.starts_with("temp") && fname.ends_with("_input") {
+                        // Try to get label: tempN_label for tempN_input
+                        let label_file = hwmon_dir.join(fname.replace("_input", "_label"));
+                        let label = fs::read_to_string(&label_file).ok().map(|s| s.trim().to_string());
+                        sensors.push(HwmonSensorInfo {
+                            input: fname.to_string(),
+                            label: label.filter(|l| !l.is_empty()),
+                        });
+                    } else if fname.starts_with("pwm") && fname.len() > 3 && fname[3..].chars().all(|c| c.is_ascii_digit()) {
+                        pwms.push(fname.to_string());
+                    }
+                }
+            }
+            sensors.sort_by(|a, b| a.input.cmp(&b.input));
+            pwms.sort();
+            devices.push(HwmonDeviceInfo {
+                hwmon_path: hwmon_dir.to_string_lossy().to_string(),
+                name,
+                sensors,
+                pwms,
+            });
+        }
+    }
+    devices
 } 
